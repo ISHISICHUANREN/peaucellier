@@ -56,6 +56,15 @@
   .group label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
   .group label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--p); }
+  select {
+    width: 100%;
+    background: #101218;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 8px;
+    font-size: 12.5px;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   td { padding: 5px 0; border-bottom: 1px solid #1d2029; color: var(--muted); }
   td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
@@ -106,6 +115,16 @@
     <input id="sR" type="range" min="0.6" max="1.6" step="0.01" value="1.0">
   </div>
 
+  <div class="group">
+    <label>视角</label>
+    <select id="selView">
+      <option value="linkage">机构（默认）</option>
+      <option value="circles">两圆构造：B、D 从哪来</option>
+      <option value="confocal">共焦曲线族</option>
+      <option value="velocity">速度放大：哪里会飞</option>
+    </select>
+  </div>
+
   <table>
     <tr><td>OP</td><td id="oOP">–</td></tr>
     <tr><td>OP′</td><td id="oOPp">–</td></tr>
@@ -118,6 +137,7 @@
     <button id="bAuto">自动旋转</button>
     <button id="bFull">强行转满</button>
     <button id="bCurve">焦点曲线</button>
+    <button id="bPin">钉住椭圆</button>
     <button id="bClear">清除轨迹</button>
     <button id="bReset">恢复默认</button>
   </div>
@@ -147,6 +167,8 @@
     auto: false,
     forceFull: false,
     showCurve: false,
+    view: "linkage",
+    pinned: null,
     traceBreak: false,
     scale: 110,
     ox: 0, oy: 0,    // O 的屏幕位置
@@ -232,6 +254,142 @@
       }
     }
     return out;
+  }
+
+  // ---------- 绘制小工具 ----------
+  function strokePoly(pts) {
+    ctx.beginPath();
+    pts.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+    ctx.stroke();
+  }
+
+  function arrow(from, dir, len, color) {
+    const x0 = sx(from.x), y0 = sy(from.y);
+    const x1 = sx(from.x + dir.x * len), y1 = sy(from.y + dir.y * len);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    const ang = Math.atan2(y1 - y0, x1 - x0);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - 9 * Math.cos(ang - 0.42), y1 - 9 * Math.sin(ang - 0.42));
+    ctx.lineTo(x1 - 9 * Math.cos(ang + 0.42), y1 - 9 * Math.sin(ang + 0.42));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function label(t, x, y, color) {
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.fillStyle = color || "rgba(200,205,220,.8)";
+    ctx.fillText(t, x, y);
+  }
+
+  // ---------- 视角 ----------
+  function drawView(p, q, bd, h, w) {
+    const v = state.view;
+
+    if (v === "circles") {
+      ctx.save();
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = "rgba(150,160,189,.7)";
+      ctx.beginPath();
+      ctx.arc(sx(0), sy(0), state.L * state.scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(95,150,255,.75)";
+      ctx.beginPath();
+      ctx.arc(sx(p.x), sy(p.y), state.S * state.scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      // 半径示意
+      ctx.save();
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(150,160,189,.5)";
+      ctx.beginPath();
+      ctx.moveTo(sx(0), sy(0));
+      ctx.lineTo(sx(p.x), sy(p.y));
+      ctx.stroke();
+      ctx.restore();
+      label("灰圆：以 O 为心、半径 L", 24, h - 46);
+      label("蓝圆：以 P 为心、半径 S　—　交点就是 B、D", 24, h - 26);
+    }
+
+    if (v === "confocal") {
+      const d = Math.hypot(p.x, p.y);
+      ctx.save();
+      ctx.setLineDash([3, 6]);
+      ctx.lineWidth = 1.1;
+      for (let k = 1; k <= 3; k++) {
+        const pts = ellipsePts(p, d + k * 0.55, 120);
+        if (pts) {
+          ctx.strokeStyle = "rgba(255,210,122,.20)";
+          strokePoly(pts);
+        }
+        const dd = d - k * 0.45;
+        if (dd > 0.05) {
+          const br = hyperPts(p, dd, 40);
+          if (br) {
+            ctx.strokeStyle = "rgba(190,150,255,.20)";
+            br.forEach(strokePoly);
+          }
+        }
+      }
+      ctx.lineWidth = 1.7;
+      ctx.setLineDash([6, 4]);
+      const e1 = ellipsePts(p, state.L + state.S, 160);
+      if (e1) {
+        ctx.strokeStyle = "rgba(255,210,122,.85)";
+        strokePoly(e1);
+      }
+      const h1 = hyperPts(p, Math.abs(state.L - state.S), 60);
+      if (h1) {
+        ctx.strokeStyle = "rgba(190,150,255,.8)";
+        h1.forEach(strokePoly);
+      }
+      ctx.restore();
+      label("共焦族：焦点都是 O、P", 24, h - 46);
+      label("金＝|XO|+|XP|＝L+S　紫＝||XO|−|XP||＝L−S　（B、D 是交点）", 24, h - 26);
+    }
+
+    if (v === "velocity") {
+      const eps = 1e-3, th = state.theta;
+      const a0 = A();
+      const p1 = { x: a0.x + state.R * Math.cos(th - eps), y: a0.y + state.R * Math.sin(th - eps) };
+      const p2 = { x: a0.x + state.R * Math.cos(th + eps), y: a0.y + state.R * Math.sin(th + eps) };
+      const q1 = Pinv(p1), q2 = Pinv(p2);
+      if (q1 && q2 && q) {
+        const dp = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const dq = Math.hypot(q2.x - q1.x, q2.y - q1.y);
+        const amp = dp > 1e-12 ? dq / dp : Infinity;
+        arrow(p, { x: -Math.sin(th), y: Math.cos(th) }, 0.42, "#5f96ff");
+        const dx = q2.x - q1.x, dy = q2.y - q1.y;
+        const n = Math.hypot(dx, dy) || 1;
+        arrow(q, { x: dx / n, y: dy / n }, Math.min(1.8, 0.42 * amp), "#50dcae");
+        label("|dP| = " + dp.toFixed(4) + "，|dP′| = " + (isFinite(dq) ? dq.toFixed(4) : "∞"), 24, h - 46);
+        label("放大率 |dP′|/|dP| = " + (isFinite(amp) ? amp.toFixed(2) : "∞") +
+              "　（= k²/OP²，越靠近 O 越大）", 24, h - 26, "#50dcae");
+      }
+    }
+
+    // 钉住的椭圆（幽灵，任何视角都显示）
+    if (state.pinned) {
+      ctx.save();
+      ctx.setLineDash([2, 6]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(255,255,255,.3)";
+      const ghost = ellipsePts(state.pinned.P, state.pinned.sum, 140);
+      if (ghost) strokePoly(ghost);
+      ctx.beginPath();
+      ctx.arc(sx(state.pinned.P.x), sy(state.pinned.P.y), 4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,.45)";
+      ctx.fill();
+      ctx.restore();
+      label("白虚线：钉住那一刻的椭圆（当时的 P 为准）", 24, 24, "rgba(255,255,255,.55)");
+    }
   }
 
   // ---------- 坐标变换 ----------
@@ -362,6 +520,9 @@
       ctx.lineTo(sx(p.x), sy(p.y));
       ctx.stroke();
     }
+
+    // 视角叠加层
+    drawView(p, q, bd, h, w);
 
     // 铰点
     const joint = (pt, color, r, label, dx = 10, dy = -24) => {
@@ -564,6 +725,26 @@
     state.auto = !state.auto;
     ev.currentTarget.textContent = state.auto ? "暂停" : "自动旋转";
   };
+  document.getElementById("selView").addEventListener("change", (ev) => {
+    state.view = ev.target.value;
+    if (state.view === "confocal") state.showCurve = false;   // 用族代替单条
+    fit();
+    draw();
+    readout();
+  });
+
+  document.getElementById("bPin").onclick = (ev) => {
+    if (state.pinned) {
+      state.pinned = null;
+      ev.currentTarget.textContent = "钉住椭圆";
+    } else {
+      const p = P();
+      state.pinned = { P: { x: p.x, y: p.y }, sum: state.L + state.S };
+      ev.currentTarget.textContent = "取消钉住";
+    }
+    draw();
+  };
+
   document.getElementById("bCurve").onclick = (ev) => {
     state.showCurve = !state.showCurve;
     ev.currentTarget.textContent = state.showCurve ? "隐藏曲线" : "焦点曲线";
