@@ -1,13 +1,13 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>椭圆的像 · 反演不封闭</title>
+<title>圆锥曲线的像 · 反演</title>
 <style>
   :root {
     --bg: #0e0f13; --panel: #16181f; --line: #2a2e3a; --text: #e6e8ef;
-    --muted: #8b92a6; --p: #5f96ff; --ell: #ffd27a; --img: #50dcae; --circle: #6b7896;
+    --muted: #8b92a6; --p: #5f96ff; --conic: #ffd27a; --img: #50dcae; --circle: #6b7896;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -17,22 +17,27 @@
     display: flex; min-height: 100%;
   }
   main { flex: 1 1 auto; position: relative; min-width: 0; }
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
   aside {
-    width: 330px; flex: 0 0 330px; background: var(--panel);
+    width: 336px; flex: 0 0 336px; background: var(--panel);
     border-left: 1px solid var(--line); padding: 20px; overflow-y: auto;
   }
   h1 { font-size: 17px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .nav { margin: -6px 0 14px; font-size: 12px; }
   .formula {
     background: #101218; border: 1px solid var(--line); border-radius: 8px;
     padding: 10px 12px; font-family: ui-monospace, Consolas, monospace;
-    font-size: 12.5px; color: var(--img); margin-bottom: 16px; line-height: 1.7;
+    font-size: 12px; color: var(--img); margin-bottom: 14px; line-height: 1.8;
   }
-  .group { margin-bottom: 14px; }
+  .group { margin-bottom: 13px; }
   .group label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
   .group label b { color: var(--text); font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--p); }
+  select {
+    width: 100%; background: #101218; color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 8px; font-size: 12.5px;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   td { padding: 5px 0; border-bottom: 1px solid #1d2029; color: var(--muted); }
   td:last-child { text-align: right; color: var(--text); font-family: ui-monospace, Consolas, monospace; }
@@ -44,12 +49,13 @@
     font-size: 11.5px; cursor: pointer; white-space: nowrap;
   }
   .row button:hover { background: #262b37; }
+  .row button.on { border-color: var(--p); color: var(--p); }
   .tips { margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.75; }
   .tips b { color: var(--text); }
   a { color: var(--p); text-decoration: none; }
-  @media (max-width: 860px) {
+  @media (max-width: 880px) {
     body { flex-direction: column; }
-    main { height: 58vh; flex: none; }
+    main { height: 56vh; flex: none; }
     aside { width: 100%; flex: none; border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
@@ -58,29 +64,41 @@
 <main><canvas id="c"></canvas></main>
 
 <aside>
-  <h1>椭圆的像</h1>
-  <div class="sub">反演之后，圆锥曲线不再是圆锥曲线</div>
-  <div class="sub" style="margin:-6px 0 12px">
-    <a href="index.html">直线机构</a> · <a href="trammel.html">椭圆规</a>
-  </div>
+  <h1>圆锥曲线的像</h1>
+  <div class="sub">反演之后，它们不再是圆锥曲线</div>
+  <div class="nav"><a href="index.html">直线机构</a> · <a href="trammel.html">椭圆规</a></div>
 
   <div class="formula" id="formula"></div>
 
   <div class="group">
-    <label>椭圆半轴 a<b id="vA"></b></label>
+    <label>曲线</label>
+    <select id="selType">
+      <option value="ellipse">椭圆　x²/a² + y²/b² = 1</option>
+      <option value="hyperbola">双曲线　x²/a² − y²/b² = 1</option>
+      <option value="parabola">抛物线　y² = 4px</option>
+    </select>
+  </div>
+
+  <div class="group" id="gA">
+    <label>a<b id="vA"></b></label>
     <input id="sA" type="range" min="0.3" max="2.0" step="0.01" value="1.5">
   </div>
-  <div class="group">
-    <label>椭圆半轴 b<b id="vB"></b></label>
+  <div class="group" id="gB">
+    <label>b<b id="vB"></b></label>
     <input id="sB" type="range" min="0.2" max="1.6" step="0.01" value="0.8">
   </div>
+  <div class="group" id="gP" style="display:none">
+    <label>p<b id="vP"></b></label>
+    <input id="sP" type="range" min="0.2" max="1.5" step="0.01" value="0.8">
+  </div>
+
   <div class="group">
     <label>反演中心 O 的 x<b id="vX"></b></label>
-    <input id="sX" type="range" min="-3" max="3" step="0.02" value="2.2">
+    <input id="sX" type="range" min="-3.5" max="3.5" step="0.02" value="2.2">
   </div>
   <div class="group">
     <label>反演中心 O 的 y<b id="vY"></b></label>
-    <input id="sY" type="range" min="-2.2" max="2.2" step="0.02" value="0.9">
+    <input id="sY" type="range" min="-2.5" max="2.5" step="0.02" value="0.9">
   </div>
   <div class="group">
     <label>反演半径 ρ<b id="vR"></b></label>
@@ -90,26 +108,30 @@
   <table>
     <tr><td>OP</td><td id="oOP">–</td></tr>
     <tr><td>OP′</td><td id="oOPp">–</td></tr>
-    <tr><td>OP · OP′（应恒定）</td><td id="oK">–</td></tr>
+    <tr><td>OP · OP′</td><td id="oK">–</td></tr>
+    <tr><td>O 是否在曲线上</td><td id="oOn">–</td></tr>
   </table>
 
   <div class="row">
-    <button id="bOn">O 移到椭圆上</button>
-    <button id="bCenter">O 移到椭圆中心</button>
+    <button id="bOn">O 贴上曲线</button>
+    <button id="bCenter">O 移到中心</button>
   </div>
   <div class="row">
+    <button id="bOrbit">让 O 绕一圈</button>
     <button id="bPause">暂停</button>
+  </div>
+  <div class="row">
     <button id="bReset">恢复默认</button>
   </div>
 
   <div class="tips">
-    <b>看什么</b><br>
-    · 金线是椭圆，绿线是它在反演下的像<br>
-    · O 在椭圆外 / 内 → 像是**双纽线型的四次曲线**（两个自交点在无穷远）<br>
-    · 把 O **移到椭圆上**：椭圆过 O，像会退化——一个尖点被甩到无穷远<br>
-    · 把 O 移到**中心**：像还是四次曲线，但变得很对称<br><br>
-    <b>为什么重要</b><br>
-    反演把「直线 ↔ 圆」封成一个封闭族，但**不封闭圆锥曲线**。椭圆、双曲线、抛物线在反演下会跑出这个家族——这正是它比「圆」更本质的地方。
+    <b>怎么玩</b><br>
+    · <b>直接拖动画面上的白点 O</b>，像会实时重画<br>
+    · O 不在曲线上 → 像是**四次曲线**（两个环点各被穿过两次）<br>
+    · 把 O 拖到曲线上 → 次数掉一档，变成**三次**，还会多出一条伸向无穷的分支<br>
+    · 「让 O 绕一圈」是最直观的：看这条像怎么连续变形、什么时候“炸开”<br><br>
+    <b>一句话</b><br>
+    反演把「直线 ↔ 圆」封成封闭家族，但**圆锥曲线跑不出去**——这正是 Peaucellier 能成立的那点运气。
   </div>
 </aside>
 
@@ -117,7 +139,9 @@
 (() => {
   "use strict";
   const state = {
-    a: 1.5, b: 0.8, ox: 2.2, oy: 0.9, rho: 1.2, theta: 0, paused: false,
+    type: "ellipse", a: 1.5, b: 0.8, p: 0.8,
+    ox: 2.2, oy: 0.9, rho: 1.2, theta: 0,
+    paused: false, orbit: false, orbitAng: 0,
     scale: 110, cx: 0, cy: 0,
   };
   const TAU = Math.PI * 2;
@@ -131,12 +155,67 @@
   function inv(p) {
     const dx = p.x - state.ox, dy = p.y - state.oy;
     const r2 = dx * dx + dy * dy;
-    if (r2 < 1e-8) return null;
+    if (r2 < 1e-9) return null;
     return { x: state.ox + dx * k2() / r2, y: state.oy + dy * k2() / r2 };
   }
 
-  function ellipsePt(t) {
-    return { x: state.a * Math.cos(t), y: state.b * Math.sin(t) };
+  // 曲线 → 若干条折线（椭圆一条、双曲线两条、抛物线一条）
+  function conicPolylines() {
+    const out = [];
+    if (state.type === "ellipse") {
+      const pts = [];
+      for (let i = 0; i <= 360; i++) {
+        const t = TAU * i / 360;
+        pts.push({ x: state.a * Math.cos(t), y: state.b * Math.sin(t) });
+      }
+      out.push(pts);
+    } else if (state.type === "hyperbola") {
+      for (const s of [-1, 1]) {
+        const pts = [];
+        for (let i = -140; i <= 140; i++) {
+          const t = (i / 140) * 1.45;
+          pts.push({ x: s * state.a * Math.cosh(t), y: state.b * Math.sinh(t) });
+        }
+        out.push(pts);
+      }
+    } else {
+      const pts = [];
+      for (let i = -120; i <= 120; i++) {
+        const t = (i / 120) * 2.6;
+        pts.push({ x: state.p * t * t, y: 2 * state.p * t });
+      }
+      out.push(pts);
+    }
+    return out;
+  }
+
+  // 把一条折线做反演，遇到奇点/过远就断开
+  function invertPolyline(pts) {
+    const segs = [];
+    let cur = [];
+    for (const p of pts) {
+      const q = inv(p);
+      if (!q || Math.hypot(q.x, q.y) > 5) {
+        if (cur.length > 1) segs.push(cur);
+        cur = [];
+        continue;
+      }
+      cur.push(q);
+    }
+    if (cur.length > 1) segs.push(cur);
+    return segs;
+  }
+
+  // 点在曲线上吗（解析判断）
+  function onConic() {
+    const x = state.ox, y = state.oy;
+    if (state.type === "ellipse") {
+      return Math.abs(x * x / (state.a * state.a) + y * y / (state.b * state.b) - 1) < 0.015;
+    }
+    if (state.type === "hyperbola") {
+      return Math.abs(x * x / (state.a * state.a) - y * y / (state.b * state.b) - 1) < 0.015;
+    }
+    return Math.abs(y * y - 4 * state.p * x) < 0.03 * Math.max(1, state.p);
   }
 
   function fit() {
@@ -146,136 +225,149 @@
     cv.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // 取景：覆盖椭圆、反演圆、像的主要部分
-    let xmin = -state.a, xmax = state.a, ymin = -state.b, ymax = state.b;
+    let xmin = 0, xmax = 0, ymin = 0, ymax = 0;
     const add = (x, y) => {
       xmin = Math.min(xmin, x); xmax = Math.max(xmax, x);
       ymin = Math.min(ymin, y); ymax = Math.max(ymax, y);
     };
     add(state.ox - state.rho, state.oy - state.rho);
     add(state.ox + state.rho, state.oy + state.rho);
-    for (let i = 0; i < 240; i++) {
-      const q = inv(ellipsePt(TAU * i / 240));
-      if (!q) continue;
-      if (Math.hypot(q.x, q.y) > 8) continue;
-      add(q.x, q.y);
+    for (const line of conicPolylines()) {
+      for (const p of line) if (Math.abs(p.x) < 5 && Math.abs(p.y) < 5) add(p.x, p.y);
     }
-    const wSpan = Math.max(0.001, xmax - xmin), hSpan = Math.max(0.001, ymax - ymin);
-    state.scale = Math.min(w / (wSpan * 1.25), h / (hSpan * 1.25));
+    for (const line of conicPolylines()) {
+      for (const seg of invertPolyline(line)) {
+        for (const q of seg) if (Math.hypot(q.x, q.y) < 5) add(q.x, q.y);
+      }
+    }
+    const wSpan = Math.max(0.5, xmax - xmin), hSpan = Math.max(0.5, ymax - ymin);
+    state.scale = Math.min(w / (wSpan * 1.2), h / (hSpan * 1.2));
     state.cx = w / 2 - ((xmin + xmax) / 2) * state.scale;
     state.cy = h / 2 + ((ymin + ymax) / 2) * state.scale;
   }
 
-  function polyPoints(fn, n = 400) {
-    const out = [];
-    for (let i = 0; i <= n; i++) {
-      const p = fn(TAU * i / n);
-      if (p) out.push(p);
+  function strokeSegs(segs, color, width, dash) {
+    ctx.save();
+    if (dash) ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    for (const seg of segs) {
+      ctx.beginPath();
+      seg.forEach((p, i) => (i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y))));
+      ctx.stroke();
     }
-    return out;
+    ctx.restore();
   }
 
   function draw() {
     const w = cv.clientWidth, h = cv.clientHeight;
     ctx.clearRect(0, 0, w, h);
 
-    // 椭圆
-    ctx.strokeStyle = "rgba(255,210,122,.9)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    polyPoints(ellipsePt).forEach((p, i) => (i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y))));
-    ctx.stroke();
-
+    const conic = conicPolylines();
     // 反演圆
     ctx.save();
     ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = "rgba(107,120,150,.6)";
+    ctx.strokeStyle = "rgba(107,120,150,.55)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(sx(state.ox), sy(state.oy), state.rho * state.scale, 0, TAU);
     ctx.stroke();
     ctx.restore();
 
-    // 像：分段（遇到奇点断开）
-    const pts = [];
-    for (let i = 0; i <= 720; i++) {
-      const p = ellipsePt(TAU * i / 720);
-      const q = inv(p);
-      const far = q && Math.hypot(q.x, q.y) < 12;
-      if (q && far) pts.push({ p, q });
-      else pts.push(null);
-    }
-    ctx.strokeStyle = "rgba(80,220,174,.9)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    let started = false;
-    pts.forEach((item) => {
-      if (!item) { started = false; return; }
-      const X = sx(item.q.x), Y = sy(item.q.y);
-      if (!started) { ctx.moveTo(X, Y); started = true; }
-      else ctx.lineTo(X, Y);
-    });
-    ctx.stroke();
+    // 原曲线
+    strokeSegs(conic, "rgba(255,210,122,.95)", 2);
 
-    // 动点与连线
-    const p0 = ellipsePt(state.theta);
-    const q0 = inv(p0);
-    if (q0) {
+    // 像
+    conic.forEach((line) => strokeSegs(invertPolyline(line), "rgba(80,220,174,.9)", 2));
+
+    // 动点
+    let base = null;
+    if (state.type === "ellipse") {
+      base = { x: state.a * Math.cos(state.theta), y: state.b * Math.sin(state.theta) };
+    } else if (state.type === "hyperbola") {
+      const t = (state.theta / TAU) * 2.9 - 1.45;
+      base = { x: state.a * Math.cosh(t), y: state.b * Math.sinh(t) };
+    } else {
+      const t = (state.theta / TAU) * 5.2 - 2.6;
+      base = { x: state.p * t * t, y: 2 * state.p * t };
+    }
+    const q = base ? inv(base) : null;
+
+    if (q) {
       ctx.save();
       ctx.setLineDash([3, 4]);
-      ctx.strokeStyle = "rgba(255,255,255,.25)";
+      ctx.strokeStyle = "rgba(255,255,255,.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(sx(state.ox), sy(state.oy));
-      ctx.lineTo(sx(p0.x), sy(p0.y));
+      ctx.lineTo(sx(base.x), sy(base.y));
       ctx.stroke();
       ctx.restore();
 
       ctx.beginPath();
-      ctx.arc(sx(q0.x), sy(q0.y), 7, 0, TAU);
+      ctx.arc(sx(q.x), sy(q.y), 7, 0, TAU);
       ctx.fillStyle = "#50dcae";
       ctx.fill();
       ctx.fillStyle = "#50dcae";
       ctx.font = "600 14px system-ui, sans-serif";
-      ctx.fillText("P′", sx(q0.x) + 10, sy(q0.y) - 22);
-
-      const r0 = Math.hypot(p0.x - state.ox, p0.y - state.oy);
-      const r1 = Math.hypot(q0.x - state.ox, q0.y - state.oy);
-      document.getElementById("oOP").textContent = r0.toFixed(3);
-      document.getElementById("oOPp").textContent = r1.toFixed(3);
-      const el = document.getElementById("oK");
-      el.textContent = (r0 * r1).toFixed(4) + " (= ρ²)";
-      el.className = "ok";
+      ctx.fillText("P′", sx(q.x) + 10, sy(q.y) - 20);
+    }
+    if (base) {
+      ctx.beginPath();
+      ctx.arc(sx(base.x), sy(base.y), 8, 0, TAU);
+      ctx.fillStyle = "#5f96ff";
+      ctx.fill();
+      ctx.fillStyle = "#5f96ff";
+      ctx.font = "600 14px system-ui, sans-serif";
+      ctx.fillText("P", sx(base.x) + 10, sy(base.y) - 20);
     }
 
+    // O
     ctx.beginPath();
-    ctx.arc(sx(p0.x), sy(p0.y), 8, 0, TAU);
-    ctx.fillStyle = "#5f96ff";
-    ctx.fill();
-    ctx.fillStyle = "#5f96ff";
-    ctx.font = "600 14px system-ui, sans-serif";
-    ctx.fillText("P", sx(p0.x) + 10, sy(p0.y) - 22);
-
-    // 中心 O
-    ctx.beginPath();
-    ctx.arc(sx(state.ox), sy(state.oy), 6, 0, TAU);
+    ctx.arc(sx(state.ox), sy(state.oy), 7, 0, TAU);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.fillStyle = "#ffffff";
     ctx.font = "600 14px system-ui, sans-serif";
     ctx.fillText("O", sx(state.ox) - 26, sy(state.oy) + 20);
 
+    // 读数
+    if (base && q) {
+      const r0 = Math.hypot(base.x - state.ox, base.y - state.oy);
+      const r1 = Math.hypot(q.x - state.ox, q.y - state.oy);
+      document.getElementById("oOP").textContent = r0.toFixed(3);
+      document.getElementById("oOPp").textContent = r1.toFixed(3);
+      const el = document.getElementById("oK");
+      el.textContent = (r0 * r1).toFixed(4) + " (= ρ²)";
+      el.className = "ok";
+    }
+    const on = onConic();
+    const onEl = document.getElementById("oOn");
+    onEl.textContent = on ? "在（三次）" : "不在（四次）";
+    onEl.className = on ? "ok" : "";
+
     document.getElementById("formula").textContent =
-      "OP · OP′ = ρ² = " + k2().toFixed(2) + "      O = (" + state.ox.toFixed(2) + ", " + state.oy.toFixed(2) + ")";
+      "OP · OP′ = ρ² = " + k2().toFixed(2) +
+      "      O = (" + state.ox.toFixed(2) + ", " + state.oy.toFixed(2) + ")" +
+      (on ? "      退化：O 在曲线上" : "");
   }
 
   function tick() {
-    if (!state.paused) state.theta += 0.008;
+    if (!state.paused) state.theta += 0.01;
+    if (state.orbit) {
+      state.orbitAng += 0.012;
+      state.ox = 2.1 * Math.cos(state.orbitAng);
+      state.oy = 1.5 * Math.sin(state.orbitAng);
+      document.getElementById("sX").value = state.ox;
+      document.getElementById("sY").value = state.oy;
+      document.getElementById("vX").textContent = state.ox.toFixed(2);
+      document.getElementById("vY").textContent = state.oy.toFixed(2);
+    }
     draw();
     requestAnimationFrame(tick);
   }
 
-  const bind = (id, key, out, after) => {
+  const bind = (id, key, out) => {
     const el = document.getElementById(id);
     const lab = document.getElementById(out);
     el.value = state[key];
@@ -284,32 +376,71 @@
       state[key] = parseFloat(el.value);
       lab.textContent = state[key].toFixed(2);
       fit();
-      if (after) after();
       draw();
     });
   };
-
-  // O 是否恰在椭圆上（用于显示退化）
-  function oOnEllipse() {
-    const v = (state.ox * state.ox) / (state.a * state.a) + (state.oy * state.oy) / (state.b * state.b);
-    return Math.abs(v - 1) < 0.02;
-  }
-
   bind("sA", "a", "vA");
   bind("sB", "b", "vB");
+  bind("sP", "p", "vP");
   bind("sX", "ox", "vX");
   bind("sY", "oy", "vY");
   bind("sR", "rho", "vR");
 
-  document.getElementById("bOn").onclick = () => {
-    // 放到椭圆上（取当前角度对应的点，再偏一点避免正好撞上奇点）
-    const t = 0.9;
-    state.ox = state.a * Math.cos(t);
-    state.oy = state.b * Math.sin(t);
+  // 拖 O
+  let dragging = false;
+  const toWorld = (ev) => {
+    const r = cv.getBoundingClientRect();
+    return { x: (ev.clientX - r.left - state.cx) / state.scale, y: (state.cy - (ev.clientY - r.top)) / state.scale };
+  };
+  cv.addEventListener("pointerdown", (ev) => {
+    dragging = true;
+    cv.setPointerCapture(ev.pointerId);
+    moveO(ev);
+  });
+  cv.addEventListener("pointermove", (ev) => { if (dragging) moveO(ev); });
+  cv.addEventListener("pointerup", (ev) => {
+    dragging = false;
+    cv.releasePointerCapture(ev.pointerId);
+  });
+
+  function moveO(ev) {
+    const w = toWorld(ev);
+    state.ox = Math.max(-3.5, Math.min(3.5, w.x));
+    state.oy = Math.max(-2.5, Math.min(2.5, w.y));
+    state.orbit = false;
+    document.getElementById("bOrbit").classList.remove("on");
+    document.getElementById("bOrbit").textContent = "让 O 绕一圈";
     document.getElementById("sX").value = state.ox;
     document.getElementById("sY").value = state.oy;
     document.getElementById("vX").textContent = state.ox.toFixed(2);
     document.getElementById("vY").textContent = state.oy.toFixed(2);
+    draw();
+  }
+
+  document.getElementById("selType").addEventListener("change", (ev) => {
+    state.type = ev.target.value;
+    document.getElementById("gA").style.display = state.type === "parabola" ? "none" : "";
+    document.getElementById("gB").style.display = state.type === "ellipse" ? "" : state.type === "hyperbola" ? "" : "none";
+    document.getElementById("gP").style.display = state.type === "parabola" ? "" : "none";
+    fit();
+    draw();
+  });
+
+  document.getElementById("bOn").onclick = () => {
+    if (state.type === "ellipse") {
+      state.ox = state.a * 0.62; state.oy = state.b * 0.78;
+    } else if (state.type === "hyperbola") {
+      // 用参数式取点，保证严格在曲线上：x = a·cosh u, y = b·sinh u
+      const u = 0.6;
+      state.ox = state.a * Math.cosh(u);
+      state.oy = state.b * Math.sinh(u);
+    } else {
+      state.ox = state.p * 0.9; state.oy = 2 * state.p * 0.95;
+    }
+    ["X", "Y"].forEach((k) => {
+      document.getElementById("s" + k).value = state["o" + k.toLowerCase()];
+      document.getElementById("v" + k).textContent = state["o" + k.toLowerCase()].toFixed(2);
+    });
     fit();
     draw();
   };
@@ -322,16 +453,28 @@
     fit();
     draw();
   };
+  document.getElementById("bOrbit").onclick = (ev) => {
+    state.orbit = !state.orbit;
+    ev.currentTarget.classList.toggle("on", state.orbit);
+    ev.currentTarget.textContent = state.orbit ? "停止绕行" : "让 O 绕一圈";
+  };
   document.getElementById("bPause").onclick = (ev) => {
     state.paused = !state.paused;
     ev.currentTarget.textContent = state.paused ? "继续" : "暂停";
   };
   document.getElementById("bReset").onclick = () => {
-    state.a = 1.5; state.b = 0.8; state.ox = 2.2; state.oy = 0.9; state.rho = 1.2;
-    [["sA", "a"], ["sB", "b"], ["sX", "ox"], ["sY", "oy"], ["sR", "rho"]].forEach(([id, key]) => {
+    state.type = "ellipse"; state.a = 1.5; state.b = 0.8; state.p = 0.8;
+    state.ox = 2.2; state.oy = 0.9; state.rho = 1.2; state.orbit = false;
+    document.getElementById("selType").value = "ellipse";
+    document.getElementById("gA").style.display = "";
+    document.getElementById("gB").style.display = "";
+    document.getElementById("gP").style.display = "none";
+    [["sA", "a"], ["sB", "b"], ["sP", "p"], ["sX", "ox"], ["sY", "oy"], ["sR", "rho"]].forEach(([id, key]) => {
       document.getElementById(id).value = state[key];
       document.getElementById("v" + key[0].toUpperCase() + key.slice(1)).textContent = state[key].toFixed(2);
     });
+    document.getElementById("bOrbit").classList.remove("on");
+    document.getElementById("bOrbit").textContent = "让 O 绕一圈";
     fit();
   };
 
@@ -342,3 +485,4 @@
 </script>
 </body>
 </html>
+
