@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Peaucellier 直线机构 · 交互演示</title>
+<style>
+  :root {
+    --bg: #0e0f13;
+    --panel: #16181f;
+    --line: #2a2e3a;
+    --text: #e6e8ef;
+    --muted: #8b92a6;
+    --bar: #c9cedb;
+    --p: #5f96ff;
+    --pp: #50dcae;
+    --o: #ffffff;
+    --a: #ffd27a;
+    --bd: #96a0bd;
+    --warn: #ff9a76;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    display: flex;
+    min-height: 100%;
+  }
+  main { flex: 1 1 auto; position: relative; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+
+  aside {
+    width: 340px;
+    flex: 0 0 340px;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    padding: 20px 20px 40px;
+    overflow-y: auto;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; letter-spacing: .3px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .formula {
+    background: #101218;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13px;
+    color: var(--pp);
+    margin-bottom: 18px;
+  }
+  .group { margin-bottom: 18px; }
+  .group label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .group label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--p); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 5px 0; border-bottom: 1px solid #1d2029; color: var(--muted); }
+  td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+  .ok { color: var(--pp) !important; }
+  .bad { color: var(--warn) !important; }
+  .row { display: flex; gap: 8px; margin-top: 14px; }
+  button {
+    flex: 1;
+    background: #1e222c;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:hover { background: #262b37; }
+  .tips { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.75; }
+  .tips b { color: var(--text); }
+  code { background: #101218; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+  @media (max-width: 860px) {
+    body { flex-direction: column; }
+    main { height: 62vh; flex: none; }
+    aside { width: 100%; flex: none; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<main><canvas id="c"></canvas></main>
+
+<aside>
+  <h1>Peaucellier 直线机构</h1>
+  <div class="sub">七根杆，把圆周运动变成精确直线</div>
+
+  <div class="formula" id="formula"></div>
+
+  <div class="group">
+    <label>OB = OD（长杆）<b id="vL"></b></label>
+    <input id="sL" type="range" min="1.8" max="3.4" step="0.01" value="2.6">
+  </div>
+  <div class="group">
+    <label>BP = DP（菱形边）<b id="vS"></b></label>
+    <input id="sS" type="range" min="0.6" max="2.4" step="0.01" value="1.9">
+  </div>
+  <div class="group">
+    <label>曲柄半径 R<b id="vR"></b></label>
+    <input id="sR" type="range" min="0.6" max="1.6" step="0.01" value="1.0">
+  </div>
+
+  <table>
+    <tr><td>OP</td><td id="oOP">–</td></tr>
+    <tr><td>OP′</td><td id="oOPp">–</td></tr>
+    <tr><td>OP · OP′（应恒定）</td><td id="oK">–</td></tr>
+    <tr><td>OB / OD（实测）</td><td id="oOB">–</td></tr>
+    <tr><td>BP / DP / BP′ / DP′</td><td id="oBP">–</td></tr>
+  </table>
+
+  <div class="row">
+    <button id="bAuto">自动旋转</button>
+    <button id="bClear">清除轨迹</button>
+    <button id="bReset">恢复默认</button>
+  </div>
+
+  <div class="tips">
+    <b>怎么玩</b><br>
+    · 拖动画布上的蓝点 <b>P</b>，它会自动贴着圆走<br>
+    · 改 OB / BP，看 P′ 的直线怎么左右移动<br>
+    · 把 BP 调到接近 OB，菱形会被压扁——那是机构的奇异位置<br>
+    · 右下角数值实时验证：杆长永远不变，OP·OP′ 永远等于 k²
+  </div>
+</aside>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- 状态 ----------
+  const state = {
+    L: 2.6,          // OB = OD
+    S: 1.9,          // 菱形边长
+    R: 1.0,          // 曲柄半径，同时 OA = R（保证圆过 O）
+    theta: -0.6,     // P 在圆上的参数角
+    trace: [],       // P′ 的轨迹
+    dragging: false,
+    auto: false,
+    scale: 110,
+    ox: 0, oy: 0,    // O 的屏幕位置
+  };
+  const MAX_TRACE = 4000;
+  window.__state = state;          // 方便在控制台里改参数、调试
+  window.addEventListener("error", (e) => {
+    window.__err = (e.message || "error") + " @" + (e.lineno || 0);
+  });
+
+  const cv = document.getElementById("c");
+  const ctx = cv.getContext("2d");
+
+  // ---------- 数学 ----------
+  const A = () => ({ x: state.R, y: 0 });
+  const k2 = () => state.L * state.L - state.S * state.S;
+
+  function P() {
+    const a = A();
+    return { x: a.x + state.R * Math.cos(state.theta), y: a.y + state.R * Math.sin(state.theta) };
+  }
+
+  // P′ = 反演：OP · OP′ = k²
+  function Pinv(p) {
+    const r2 = p.x * p.x + p.y * p.y;
+    if (r2 < 1e-9) return null;
+    const k = k2();
+    return { x: p.x * k / r2, y: p.y * k / r2 };
+  }
+
+  // B、D：以 O 为圆心 L、以 P 为圆心 S 的两圆交点
+  function BD(p) {
+    const r = Math.hypot(p.x, p.y);
+    if (r < 1e-9) return null;
+    const om = (r * r + state.L * state.L - state.S * state.S) / (2 * r);
+    const h2 = state.L * state.L - om * om;
+    if (h2 < 0) return null;                     // 够不着：机构卡死
+    const h = Math.sqrt(h2);
+    const ux = p.x / r, uy = p.y / r;
+    const mx = ux * om, my = uy * om;
+    return {
+      B: { x: mx - uy * h, y: my + ux * h },
+      D: { x: mx + uy * h, y: my - ux * h },
+    };
+  }
+
+  // ---------- 坐标变换 ----------
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // 自动取景：覆盖圆、直线、P′ 的可能范围
+    const lineX = k2() / (2 * state.R);
+    const worldW = Math.max(state.R * 2 + state.R, lineX + state.R * 0.8) + 0.6;
+    const worldH = Math.max(state.R * 2.2, 3.2);
+    state.scale = Math.min(w / (worldW * 2.2), h / (worldH * 1.5));
+    state.ox = w * 0.34;
+    state.oy = h * 0.54;
+  }
+
+  const sx = (x) => state.ox + x * state.scale;
+  const sy = (y) => state.oy - y * state.scale;
+
+  // ---------- 绘制 ----------
+  function draw() {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    const p = P();
+    const q = Pinv(p);
+    const bd = BD(p);
+    const a = A();
+
+    // 曲柄圆
+    ctx.beginPath();
+    ctx.arc(sx(a.x), sy(a.y), state.R * state.scale, 0, Math.PI * 2);
+    ctx.strokeStyle = "#39415a";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // P′ 的直线
+    const lx = k2() / (2 * state.R);
+    ctx.beginPath();
+    ctx.moveTo(sx(lx), 0);
+    ctx.lineTo(sx(lx), h);
+    ctx.strokeStyle = "#2f6d5d";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#4fbf9d";
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText("P′ 的轨迹", sx(lx) + 8, h - 14);
+
+    // 轨迹
+    if (state.trace.length > 1) {
+      ctx.beginPath();
+      state.trace.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+      ctx.strokeStyle = "rgba(80,220,174,.85)";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    if (q && bd) {
+      // 六根约束杆
+      const bars = [
+        [{ x: 0, y: 0 }, bd.B], [{ x: 0, y: 0 }, bd.D],
+        [bd.B, p], [bd.D, p],
+        [bd.B, q], [bd.D, q],
+      ];
+      ctx.strokeStyle = "#c9cedb";
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = "round";
+      bars.forEach(([u, v]) => {
+        ctx.beginPath();
+        ctx.moveTo(sx(u.x), sy(u.y));
+        ctx.lineTo(sx(v.x), sy(v.y));
+        ctx.stroke();
+      });
+      // 第七根：曲柄 AP（人转的那根）
+      ctx.strokeStyle = "rgba(95,150,255,.85)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(sx(a.x), sy(a.y));
+      ctx.lineTo(sx(p.x), sy(p.y));
+      ctx.stroke();
+    }
+
+    // 铰点
+    const joint = (pt, color, r, label, dx = 10, dy = -24) => {
+      ctx.beginPath();
+      ctx.arc(sx(pt.x), sy(pt.y), r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      if (label) {
+        ctx.fillStyle = color;
+        ctx.font = "600 14px system-ui, sans-serif";
+        ctx.fillText(label, sx(pt.x) + dx, sy(pt.y) + dy);
+      }
+    };
+
+    joint({ x: 0, y: 0 }, "#ffffff", 7, "O", -26, 22);
+    joint(a, "#ffd27a", 7, "A", -8, -18);
+    if (bd) {
+      joint(bd.B, "#96a0bd", 5, "B");
+      joint(bd.D, "#96a0bd", 5, "D", 12, 8);
+    }
+    if (q) joint(q, "#50dcae", 7, "P′");
+    joint(p, "#5f96ff", 8, "P");
+
+    // 卡死提示
+    if (!bd) {
+      ctx.fillStyle = "#ff9a76";
+      ctx.font = "600 15px system-ui, sans-serif";
+      ctx.fillText("机构无法闭合：需要 |L−S| ≤ OP ≤ L+S", 24, 34);
+    }
+  }
+
+  // ---------- 读数 ----------
+  function readout() {
+    const p = P();
+    const q = Pinv(p);
+    const bd = BD(p);
+    const rp = Math.hypot(p.x, p.y);
+
+    document.getElementById("oOP").textContent = rp.toFixed(3);
+    document.getElementById("oOPp").textContent = q ? Math.hypot(q.x, q.y).toFixed(3) : "∞";
+    const prod = q ? rp * Math.hypot(q.x, q.y) : NaN;
+    const kEl = document.getElementById("oK");
+    kEl.textContent = isFinite(prod) ? prod.toFixed(4) + " (= k²)" : "–";
+    kEl.className = isFinite(prod) && Math.abs(prod - k2()) < 1e-6 ? "ok" : "";
+
+    if (bd) {
+      const d = (u, v) => Math.hypot(u.x - v.x, u.y - v.y);
+      const ob = d({ x: 0, y: 0 }, bd.B), od = d({ x: 0, y: 0 }, bd.D);
+      const bp = d(bd.B, p), dp = d(bd.D, p);
+      document.getElementById("oOB").textContent = ob.toFixed(3) + " / " + od.toFixed(3);
+      document.getElementById("oBP").textContent = [bp, dp].map((v) => v.toFixed(3)).join(" · ") + " …";
+      document.getElementById("oOB").className = "ok";
+      document.getElementById("oBP").className = "ok";
+    } else {
+      document.getElementById("oOB").textContent = "–";
+      document.getElementById("oBP").textContent = "–";
+      document.getElementById("oOB").className = "bad";
+      document.getElementById("oBP").className = "bad";
+    }
+
+    document.getElementById("formula").textContent =
+      "k² = L² − S² = " + k2().toFixed(3) + "    直线位置 x = k²/(2R) = " + (k2() / (2 * state.R)).toFixed(3);
+  }
+
+  // ---------- 循环 ----------
+  function tick() {
+    window.__frames = (window.__frames || 0) + 1;
+    if (state.auto) {
+      state.theta += 0.007;
+      if (!BD(P())) state.theta += 0.3;   // 进入卡死区就跳过
+    }
+    const q = Pinv(P());
+    if (q) {
+      const last = state.trace[state.trace.length - 1];
+      if (!last || Math.hypot(last.x - q.x, last.y - q.y) > 1e-4) state.trace.push(q);
+      if (state.trace.length > MAX_TRACE) state.trace.shift();
+    }
+    draw();
+    readout();
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- 交互 ----------
+  function pointerToWorld(ev) {
+    const rect = cv.getBoundingClientRect();
+    return {
+      x: (ev.clientX - rect.left - state.ox) / state.scale,
+      y: (state.oy - (ev.clientY - rect.top)) / state.scale,
+    };
+  }
+
+  cv.addEventListener("pointerdown", (ev) => {
+    state.dragging = true;
+    cv.classList.add("dragging");
+    cv.setPointerCapture(ev.pointerId);
+    onDrag(ev);
+  });
+  cv.addEventListener("pointermove", (ev) => { if (state.dragging) onDrag(ev); });
+  cv.addEventListener("pointerup", (ev) => {
+    state.dragging = false;
+    cv.classList.remove("dragging");
+    cv.releasePointerCapture(ev.pointerId);
+  });
+
+  // 拖动时把 P 投影到圆上（保持 |AP| = R）
+  function onDrag(ev) {
+    const w = pointerToWorld(ev);
+    const a = A();
+    let ang = Math.atan2(w.y - a.y, w.x - a.x);
+    // 避开 OP→0 的奇异区
+    const test = { x: a.x + state.R * Math.cos(ang), y: a.y + state.R * Math.sin(ang) };
+    if (Math.hypot(test.x, test.y) < Math.abs(state.L - state.S) + 0.02) return;
+    state.theta = ang;
+    state.trace.length = 0;
+    draw();
+    readout();
+  }
+
+  // ---------- 控件 ----------
+  const bind = (id, key, out, digits = 2) => {
+    const el = document.getElementById(id);
+    const lab = document.getElementById(out);
+    el.value = state[key];
+    lab.textContent = state[key].toFixed(digits);
+    el.addEventListener("input", () => {
+      state[key] = parseFloat(el.value);
+      lab.textContent = state[key].toFixed(digits);
+      if (state.L <= state.S + 0.05) {         // 保证 k² > 0
+        state.S = state.L - 0.05;
+        const sS = document.getElementById("sS");
+        sS.value = state.S;
+        document.getElementById("vS").textContent = state.S.toFixed(2);
+      }
+      state.trace.length = 0;
+      fit();
+      draw();
+      readout();
+    });
+  };
+  bind("sL", "L", "vL");
+  bind("sS", "S", "vS");
+  bind("sR", "R", "vR");
+
+  document.getElementById("bAuto").onclick = (ev) => {
+    state.auto = !state.auto;
+    ev.currentTarget.textContent = state.auto ? "暂停" : "自动旋转";
+  };
+  document.getElementById("bClear").onclick = () => (state.trace.length = 0);
+  document.getElementById("bReset").onclick = () => {
+    state.L = 2.6; state.S = 1.9; state.R = 1.0; state.theta = -0.6; state.trace.length = 0;
+    ["sL", "sS", "sR"].forEach((id) => {
+      const el = document.getElementById(id);
+      el.value = state[{ sL: "L", sS: "S", sR: "R" }[id]];
+    });
+    document.getElementById("vL").textContent = state.L.toFixed(2);
+    document.getElementById("vS").textContent = state.S.toFixed(2);
+    document.getElementById("vR").textContent = state.R.toFixed(2);
+    fit();
+  };
+
+  window.addEventListener("resize", fit);
+  fit();
+  tick();
+})();
+</script>
+</body>
+</html>
