@@ -61,7 +61,8 @@
   td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
   .ok { color: var(--pp) !important; }
   .bad { color: var(--warn) !important; }
-  .row { display: flex; gap: 8px; margin-top: 14px; }
+  .row { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .row button { flex: 1 1 calc(50% - 3px); padding: 7px 6px; font-size: 11.5px; white-space: nowrap; }
   button {
     flex: 1;
     background: #1e222c;
@@ -115,6 +116,7 @@
 
   <div class="row">
     <button id="bAuto">自动旋转</button>
+    <button id="bFull">强行转满</button>
     <button id="bClear">清除轨迹</button>
     <button id="bReset">恢复默认</button>
   </div>
@@ -124,6 +126,7 @@
     · 拖动画布上的蓝点 <b>P</b>，它会自动贴着圆走<br>
     · 改 OB / BP，看 P′ 的直线怎么左右移动<br>
     · 把 BP 调到接近 OB，菱形会被压扁——那是机构的奇异位置<br>
+    · **强行转满**：不管死区，硬转一整圈。看 P′ 怎么飞出画面、机构怎么张不拢<br>
     · 右下角数值实时验证：杆长永远不变，OP·OP′ 永远等于 k²
   </div>
 </aside>
@@ -141,6 +144,8 @@
     trace: [],       // P′ 的轨迹
     dragging: false,
     auto: false,
+    forceFull: false,
+    traceBreak: false,
     scale: 110,
     ox: 0, oy: 0,    // O 的屏幕位置
   };
@@ -215,6 +220,7 @@
     const q = Pinv(p);
     const bd = BD(p);
     const a = A();
+    window.__dead = !bd;
 
     // 曲柄圆
     ctx.beginPath();
@@ -235,10 +241,12 @@
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText("P′ 的轨迹", sx(lx) + 8, h - 14);
 
-    // 轨迹
-    if (state.trace.length > 1) {
+    // 轨迹（分段：跨过死区时断开，不画那条假连线）
+    if (state.trace.length) {
       ctx.beginPath();
-      state.trace.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+      for (const seg of state.trace) {
+        seg.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+      }
       ctx.strokeStyle = "rgba(80,220,174,.85)";
       ctx.lineWidth = 2.5;
       ctx.stroke();
@@ -288,14 +296,47 @@
       joint(bd.B, "#96a0bd", 5, "B");
       joint(bd.D, "#96a0bd", 5, "D", 12, 8);
     }
-    if (q) joint(q, "#50dcae", 7, "P′");
+    if (q) {
+      const qx = sx(q.x), qy = sy(q.y);
+      if (qx > -60 && qx < w + 60 && qy > -60 && qy < h + 60) {
+        joint(q, "#50dcae", 7, "P′");
+      } else {
+        // P′ 飞出画面：边缘标注
+        const ex = Math.min(Math.max(qx, 30), w - 80);
+        const ey = Math.min(Math.max(qy, 30), h - 30);
+        ctx.fillStyle = "#50dcae";
+        ctx.font = "600 15px system-ui, sans-serif";
+        ctx.fillText("P′ → ∞", ex, ey);
+      }
+    }
     joint(p, "#5f96ff", 8, "P");
 
-    // 卡死提示
+    // 死区：两圆不相交，机构张不拢
     if (!bd) {
+      const r = Math.hypot(p.x, p.y) || 1e-6;
+      const om = (r * r + state.L * state.L - state.S * state.S) / (2 * r);
+      const gap = Math.max(0, Math.abs(om) - state.L);
+
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "rgba(255,154,118,.5)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(sx(0), sy(0), state.L * state.scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx(p.x), sy(p.y), state.S * state.scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
       ctx.fillStyle = "#ff9a76";
       ctx.font = "600 15px system-ui, sans-serif";
-      ctx.fillText("机构无法闭合：需要 |L−S| ≤ OP ≤ L+S", 24, 34);
+      ctx.fillText("死区：机构张不拢", 24, 32);
+      ctx.font = "13px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(255,154,118,.9)";
+      ctx.fillText("OP = " + r.toFixed(2) + "，杆还差 " + gap.toFixed(2) + " 才够得着", 24, 54);
+      ctx.fillStyle = "rgba(255,154,118,.55)";
+      ctx.fillText("（虚线圈是两根杆的“能够到”的范围）", 24, 74);
     }
   }
 
@@ -322,8 +363,8 @@
       document.getElementById("oOB").className = "ok";
       document.getElementById("oBP").className = "ok";
     } else {
-      document.getElementById("oOB").textContent = "–";
-      document.getElementById("oBP").textContent = "–";
+      document.getElementById("oOB").textContent = "— 死区";
+      document.getElementById("oBP").textContent = "— 指不到";
       document.getElementById("oOB").className = "bad";
       document.getElementById("oBP").className = "bad";
     }
@@ -335,15 +376,26 @@
   // ---------- 循环 ----------
   function tick() {
     window.__frames = (window.__frames || 0) + 1;
-    if (state.auto) {
+    if (state.auto || state.forceFull) {
       state.theta += 0.007;
-      if (!BD(P())) state.theta += 0.3;   // 进入卡死区就跳过
+      if (!state.forceFull && !BD(P())) state.theta += 0.3;   // 普通模式：跳过死区
     }
-    const q = Pinv(P());
-    if (q) {
-      const last = state.trace[state.trace.length - 1];
-      if (!last || Math.hypot(last.x - q.x, last.y - q.y) > 1e-4) state.trace.push(q);
-      if (state.trace.length > MAX_TRACE) state.trace.shift();
+    // 记录 P′ 轨迹（分段，死区断开）
+    const pNow = P();
+    const qNow = Pinv(pNow);
+    const rNow = Math.hypot(pNow.x, pNow.y);
+    if (!BD(pNow) || rNow < 1e-4) {
+      state.traceBreak = true;
+    } else if (qNow) {
+      if (state.traceBreak || !state.trace.length) {
+        state.trace.push([]);
+        state.traceBreak = false;
+      }
+      const seg = state.trace[state.trace.length - 1];
+      const last = seg[seg.length - 1];
+      if (!last || Math.hypot(last.x - qNow.x, last.y - qNow.y) > 1e-4) seg.push(qNow);
+      if (seg.length > 3000) seg.shift();
+      if (state.trace.length > 40) state.trace.shift();
     }
     draw();
     readout();
@@ -376,12 +428,15 @@
   function onDrag(ev) {
     const w = pointerToWorld(ev);
     const a = A();
-    let ang = Math.atan2(w.y - a.y, w.x - a.x);
-    // 避开 OP→0 的奇异区
-    const test = { x: a.x + state.R * Math.cos(ang), y: a.y + state.R * Math.sin(ang) };
-    if (Math.hypot(test.x, test.y) < Math.abs(state.L - state.S) + 0.02) return;
+    const ang = Math.atan2(w.y - a.y, w.x - a.x);
+    if (!state.forceFull) {
+      // 避开死区（OP 太小时无解）
+      const test = { x: a.x + state.R * Math.cos(ang), y: a.y + state.R * Math.sin(ang) };
+      if (Math.hypot(test.x, test.y) < Math.abs(state.L - state.S) + 0.02) return;
+    }
     state.theta = ang;
     state.trace.length = 0;
+    state.traceBreak = true;
     draw();
     readout();
   }
@@ -411,6 +466,14 @@
   bind("sS", "S", "vS");
   bind("sR", "R", "vR");
 
+  document.getElementById("bFull").onclick = (ev) => {
+    state.forceFull = !state.forceFull;
+    ev.currentTarget.textContent = state.forceFull ? "退出转满" : "强行转满";
+    state.trace.length = 0;
+    state.traceBreak = true;
+    if (state.forceFull) state.auto = true;
+    document.getElementById("bAuto").textContent = state.auto ? "暂停" : "自动旋转";
+  };
   document.getElementById("bAuto").onclick = (ev) => {
     state.auto = !state.auto;
     ev.currentTarget.textContent = state.auto ? "暂停" : "自动旋转";
