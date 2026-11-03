@@ -84,6 +84,7 @@
   </table>
 
   <div class="row">
+    <button id="bAxes">隐藏坐标轴</button>
     <button id="bClear">清除轨迹</button>
     <button id="bReset">恢复默认</button>
   </div>
@@ -106,8 +107,10 @@
 <script>
 (() => {
   "use strict";
-  const state = { L: 2.6, a: 1.9, speed: 0.7, theta: 0, trace: [], scale: 150, ox: 0, oy: 0 };
+  const state = {
+    showAxes: true, L: 2.6, a: 1.9, speed: 0.7, theta: 0, trace: [], scale: 150, ox: 0, oy: 0 };
   const TAU = Math.PI * 2;
+  window.__state = state;
   const cv = document.getElementById("c");
   const ctx = cv.getContext("2d");
 
@@ -136,9 +139,45 @@
     return { u, v, p };
   }
 
+
+  // ---------- 坐标轴 ----------
+  function drawAxes(w, h) {
+    if (!state.showAxes) return;
+    const x0 = sx(0), y0 = sy(0);
+    const xa = (0 - state.ox) / state.scale, xb = (w - state.ox) / state.scale;
+    const ya = (state.oy - h) / state.scale, yb = state.oy / state.scale;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(140,150,175,.10)";
+    ctx.lineWidth = 1;
+    for (let x = Math.ceil(xa); x <= xb; x++) {
+      ctx.beginPath(); ctx.moveTo(sx(x), 0); ctx.lineTo(sx(x), h); ctx.stroke();
+    }
+    for (let y = Math.ceil(ya); y <= yb; y++) {
+      ctx.beginPath(); ctx.moveTo(0, sy(y)); ctx.lineTo(w, sy(y)); ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(170,180,210,.5)";
+    ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(w, y0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, h); ctx.stroke();
+
+    ctx.fillStyle = "rgba(190,198,220,.7)";
+    ctx.font = "11px system-ui, sans-serif";
+    for (let x = Math.ceil(xa); x <= xb; x++) {
+      if (x === 0) continue;
+      ctx.fillText(String(x), sx(x) + 3, Math.min(Math.max(y0 + 14, 12), h - 4));
+    }
+    for (let y = Math.ceil(ya); y <= yb; y++) {
+      if (y === 0) continue;
+      ctx.fillText(String(y), Math.min(Math.max(x0 + 5, 4), w - 20), sy(y) - 4);
+    }
+    ctx.restore();
+  }
+
   function draw() {
     const w = cv.clientWidth, h = cv.clientHeight;
     ctx.clearRect(0, 0, w, h);
+
+    drawAxes(w, h);
 
     // 槽
     ctx.strokeStyle = "#3a4155";
@@ -257,6 +296,11 @@
   bind("sA", "a", "vA");
   bind("sSpd", "speed", "vS");
 
+  document.getElementById("bAxes").onclick = (ev) => {
+    state.showAxes = !state.showAxes;
+    ev.currentTarget.textContent = state.showAxes ? "隐藏坐标轴" : "坐标轴";
+    draw();
+  };
   document.getElementById("bClear").onclick = () => (state.trace.length = 0);
   document.getElementById("bReset").onclick = () => {
     state.L = 2.6; state.a = 1.9; state.speed = 0.7; state.theta = 0; state.trace.length = 0;
