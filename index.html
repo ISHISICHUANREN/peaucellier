@@ -117,6 +117,7 @@
   <div class="row">
     <button id="bAuto">自动旋转</button>
     <button id="bFull">强行转满</button>
+    <button id="bCurve">焦点曲线</button>
     <button id="bClear">清除轨迹</button>
     <button id="bReset">恢复默认</button>
   </div>
@@ -145,6 +146,7 @@
     dragging: false,
     auto: false,
     forceFull: false,
+    showCurve: false,
     traceBreak: false,
     scale: 110,
     ox: 0, oy: 0,    // O 的屏幕位置
@@ -191,6 +193,47 @@
     };
   }
 
+  // 以 O、P 为焦点的椭圆：|XO| + |XP| = sum（B、D 在这条线上）
+  function ellipsePts(p, sum, n = 160) {
+    const d = Math.hypot(p.x, p.y);
+    const a = sum / 2, c = d / 2;
+    const b2 = a * a - c * c;
+    if (b2 < 0) return null;
+    const b = Math.sqrt(b2);
+    const ux = d > 1e-9 ? p.x / d : 1, uy = d > 1e-9 ? p.y / d : 0;
+    const nx = -uy, ny = ux;
+    const cx = p.x / 2, cy = p.y / 2;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = 2 * Math.PI * i / n;
+      const ca = a * Math.cos(t), sb = b * Math.sin(t);
+      pts.push({ x: cx + ca * ux + sb * nx, y: cy + ca * uy + sb * ny });
+    }
+    return pts;
+  }
+
+  // 以 O、P 为焦点的双曲线：| |XO| − |XP| | = diff（B、D 也在这条线上）
+  function hyperPts(p, diff, n = 80) {
+    const d = Math.hypot(p.x, p.y);
+    const a = diff / 2, c = d / 2;
+    const b2 = c * c - a * a;
+    if (b2 < 0 || a < 1e-9) return null;
+    const b = Math.sqrt(b2);
+    const ux = d > 1e-9 ? p.x / d : 1, uy = d > 1e-9 ? p.y / d : 0;
+    const nx = -uy, ny = ux;
+    const cx = p.x / 2, cy = p.y / 2;
+    const out = [[], []];
+    for (let s = -1; s <= 1; s += 2) {
+      const arr = s < 0 ? out[0] : out[1];
+      for (let i = -n; i <= n; i++) {
+        const t = (i / n) * 2.0;
+        const ch = a * Math.cosh(t), sh = b * Math.sinh(t);
+        arr.push({ x: cx + s * ch * ux + sh * nx, y: cy + s * ch * uy + sh * ny });
+      }
+    }
+    return out;
+  }
+
   // ---------- 坐标变换 ----------
   function fit() {
     const dpr = window.devicePixelRatio || 1;
@@ -201,10 +244,11 @@
 
     // 自动取景：覆盖圆、直线、P′ 的可能范围
     const lineX = k2() / (2 * state.R);
-    const worldW = Math.max(state.R * 2 + state.R, lineX + state.R * 0.8) + 0.6;
-    const worldH = Math.max(state.R * 2.2, 3.2);
+    const curveRoom = state.showCurve ? (state.L + state.S) * 0.75 : 0;
+    const worldW = Math.max(state.R * 2 + state.R, lineX + state.R * 0.8) + 0.6 + curveRoom;
+    const worldH = Math.max(state.R * 2.2, 3.2) + curveRoom;
     state.scale = Math.min(w / (worldW * 2.2), h / (worldH * 1.5));
-    state.ox = w * 0.34;
+    state.ox = w * (state.showCurve ? 0.5 : 0.34);
     state.oy = h * 0.54;
   }
 
@@ -253,7 +297,49 @@
     }
 
     if (q && bd) {
-      // 六根约束杆
+      // 焦点曲线：椭圆（和）与双曲线（差），B、D 是它们的交点
+    if (state.showCurve) {
+      const d = Math.hypot(p.x, p.y);
+      const ell = ellipsePts(p, state.L + state.S);
+      const hyp = hyperPts(p, Math.abs(state.L - state.S));
+
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1.4;
+      if (ell) {
+        ctx.strokeStyle = "rgba(255,210,122,.5)";
+        ctx.beginPath();
+        ell.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+        ctx.stroke();
+      }
+      if (hyp) {
+        ctx.strokeStyle = "rgba(190,150,255,.5)";
+        hyp.forEach((branch) => {
+          ctx.beginPath();
+          branch.forEach((t, i) => (i ? ctx.lineTo(sx(t.x), sy(t.y)) : ctx.moveTo(sx(t.x), sy(t.y))));
+          ctx.stroke();
+        });
+      }
+      ctx.restore();
+
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(255,210,122,.9)";
+      ctx.fillText("金：|XO| + |XP| = L+S —— 过 B、D", 24, h - 48);
+      ctx.fillStyle = "rgba(190,150,255,.9)";
+      ctx.fillText("紫：| |XO| − |XP| | = L−S —— 也过 B、D", 24, h - 28);
+
+      const near = (x, y) => Math.abs(x - y) < 0.03;
+      if (near(d, state.L + state.S)) {
+        ctx.fillStyle = "#ffd27a";
+        ctx.fillText("椭圆已退化成线段（远边界，另一个死点）", 24, h - 68);
+      }
+      if (near(d, Math.abs(state.L - state.S))) {
+        ctx.fillStyle = "#be96ff";
+        ctx.fillText("双曲线已退化成射线（近边界，就是死区）", 24, h - 88);
+      }
+    }
+
+    // 六根约束杆
       const bars = [
         [{ x: 0, y: 0 }, bd.B], [{ x: 0, y: 0 }, bd.D],
         [bd.B, p], [bd.D, p],
@@ -477,6 +563,13 @@
   document.getElementById("bAuto").onclick = (ev) => {
     state.auto = !state.auto;
     ev.currentTarget.textContent = state.auto ? "暂停" : "自动旋转";
+  };
+  document.getElementById("bCurve").onclick = (ev) => {
+    state.showCurve = !state.showCurve;
+    ev.currentTarget.textContent = state.showCurve ? "隐藏曲线" : "焦点曲线";
+    fit();
+    draw();
+    readout();
   };
   document.getElementById("bClear").onclick = () => (state.trace.length = 0);
   document.getElementById("bReset").onclick = () => {
