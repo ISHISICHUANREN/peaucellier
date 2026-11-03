@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>椭圆规 · 连杆画椭圆</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #16181f; --line: #2a2e3a; --text: #e6e8ef;
+    --muted: #8b92a6; --p: #5f96ff; --ell: #ffd27a; --rod: #c9cedb; --rail: #3a4155;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    display: flex; min-height: 100%;
+  }
+  main { flex: 1 1 auto; position: relative; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  aside {
+    width: 330px; flex: 0 0 330px; background: var(--panel);
+    border-left: 1px solid var(--line); padding: 20px; overflow-y: auto;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .formula {
+    background: #101218; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 12.5px; color: var(--ell); margin-bottom: 18px; line-height: 1.7;
+  }
+  .group { margin-bottom: 16px; }
+  .group label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .group label b { color: var(--text); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--p); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 5px 0; border-bottom: 1px solid #1d2029; color: var(--muted); }
+  td:last-child { text-align: right; color: var(--text); font-family: ui-monospace, Consolas, monospace; }
+  .ok { color: #50dcae !important; }
+  .row { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .row button {
+    flex: 1 1 calc(50% - 3px); background: #1e222c; color: var(--text);
+    border: 1px solid var(--line); border-radius: 7px; padding: 7px 6px;
+    font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  }
+  .row button:hover { background: #262b37; }
+  .tips { margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.75; }
+  .tips b { color: var(--text); }
+  a { color: var(--p); }
+  @media (max-width: 860px) {
+    body { flex-direction: column; }
+    main { height: 60vh; flex: none; }
+    aside { width: 100%; flex: none; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<main><canvas id="c"></canvas></main>
+
+<aside>
+  <h1>椭圆规 · Trammel</h1>
+  <div class="sub">一根定长杆，两头压进两条互相垂直的槽</div>
+  <div class="sub" style="margin:-8px 0 14px"><a href="index.html">← Peaucellier 直线机构</a></div>
+
+  <div class="formula" id="formula"></div>
+
+  <div class="group">
+    <label>杆长 ℓ <b id="vL"></b></label>
+    <input id="sL" type="range" min="1.0" max="3.4" step="0.01" value="2.6">
+  </div>
+  <div class="group">
+    <label>笔到左端 a <b id="vA"></b></label>
+    <input id="sA" type="range" min="0.2" max="3.2" step="0.01" value="1.9">
+  </div>
+  <div class="group">
+    <label>转速 <b id="vS"></b></label>
+    <input id="sSpd" type="range" min="0" max="2" step="0.05" value="0.7">
+  </div>
+
+  <table>
+    <tr><td>半轴 a / b</td><td id="oAB">–</td></tr>
+    <tr><td>P 坐标</td><td id="oP">–</td></tr>
+    <tr><td>x²/b² + y²/a²</td><td id="oEq">–</td></tr>
+  </table>
+
+  <div class="row">
+    <button id="bClear">清除轨迹</button>
+    <button id="bReset">恢复默认</button>
+  </div>
+
+  <div class="tips">
+    <b>怎么玩</b><br>
+    · 杆的两端 U、V 只能在两条槽里滑<br>
+    · 笔尖 P 在杆上固定比例，轨迹就是一条**固定的椭圆**<br>
+    · 改 a 或 ℓ，看看椭圆怎么被拉长、压扁<br>
+    · 右下的和永远等于 1——那是椭圆方程的验证
+  </div>
+
+  <div class="tips">
+    <b>和直线机构的对照</b><br>
+    Peaucellier 用反演把「圆」变成「直线」；椭圆规用两根槽把「两个端点」变成「一条椭圆」。<br>
+    一个靠几何变换，一个靠机械约束——都是<b>用机构代替尺规</b>。
+  </div>
+</aside>
+
+<script>
+(() => {
+  "use strict";
+  const state = { L: 2.6, a: 1.9, speed: 0.7, theta: 0, trace: [], scale: 150, ox: 0, oy: 0 };
+  const TAU = Math.PI * 2;
+  const cv = document.getElementById("c");
+  const ctx = cv.getContext("2d");
+
+  const b = () => state.L - state.a;      // 半轴 b
+  const sx = (x) => state.ox + x * state.scale;
+  const sy = (y) => state.oy - y * state.scale;
+
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const need = Math.max(state.L, state.a, Math.max(0.2, state.L - state.a)) * 1.35;
+    state.scale = Math.min(w, h) / (need * 2);
+    state.ox = w / 2;
+    state.oy = h / 2;
+  }
+
+  function geom(theta) {
+    // 端点 U 在 x 槽、V 在 y 槽，杆长 ℓ
+    const u = { x: state.L * Math.cos(theta), y: 0 };
+    const v = { x: 0, y: state.L * Math.sin(theta) };
+    const t = state.a / state.L;
+    const p = { x: u.x + (v.x - u.x) * t, y: u.y + (v.y - u.y) * t };
+    return { u, v, p };
+  }
+
+  function draw() {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    // 槽
+    ctx.strokeStyle = "#3a4155";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx(-state.L - 0.4), sy(0));
+    ctx.lineTo(sx(state.L + 0.4), sy(0));
+    ctx.moveTo(sx(0), sy(-state.L - 0.4));
+    ctx.lineTo(sx(0), sy(state.L + 0.4));
+    ctx.stroke();
+
+    // 理论椭圆（细线）
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = "rgba(255,210,122,.35)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    const bb = b();
+    for (let i = 0; i <= 180; i++) {
+      const t = TAU * i / 180;
+      const x = bb * Math.cos(t), y = state.a * Math.sin(t);
+      i ? ctx.lineTo(sx(x), sy(y)) : ctx.moveTo(sx(x), sy(y));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 轨迹
+    if (state.trace.length > 1) {
+      ctx.beginPath();
+      state.trace.forEach((p, i) => (i ? ctx.lineTo(sx(p.x), sy(p.y)) : ctx.moveTo(sx(p.x), sy(p.y))));
+      ctx.strokeStyle = "rgba(255,210,122,.9)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    const g = geom(state.theta);
+
+    // 杆
+    ctx.strokeStyle = "#c9cedb";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(sx(g.u.x), sy(g.u.y));
+    ctx.lineTo(sx(g.v.x), sy(g.v.y));
+    ctx.stroke();
+
+    // 端点
+    const joint = (p, color, r, label, dx = 10, dy = -22) => {
+      ctx.beginPath();
+      ctx.arc(sx(p.x), sy(p.y), r, 0, TAU);
+      ctx.fillStyle = color;
+      ctx.fill();
+      if (label) {
+        ctx.fillStyle = color;
+        ctx.font = "600 14px system-ui, sans-serif";
+        ctx.fillText(label, sx(p.x) + dx, sy(p.y) + dy);
+      }
+    };
+    joint(g.u, "#96a0bd", 6, "U");
+    joint(g.v, "#96a0bd", 6, "V", 12, 8);
+    joint(g.p, "#5f96ff", 8, "P");
+
+    // 尺寸标注：a、b
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = "rgba(255,210,122,.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx(0), sy(0));
+    ctx.lineTo(sx(g.p.x), sy(0));
+    ctx.moveTo(sx(0), sy(0));
+    ctx.lineTo(sx(0), sy(g.p.y));
+    ctx.stroke();
+    ctx.restore();
+
+    // 读数
+    const bb2 = b();
+    document.getElementById("oAB").textContent = state.a.toFixed(2) + " / " + bb2.toFixed(2);
+    document.getElementById("oP").textContent = g.p.x.toFixed(3) + ", " + g.p.y.toFixed(3);
+    const val = bb2 > 1e-6 ? (g.p.x * g.p.x) / (bb2 * bb2) + (g.p.y * g.p.y) / (state.a * state.a) : NaN;
+    const el = document.getElementById("oEq");
+    el.textContent = isFinite(val) ? val.toFixed(6) : "–";
+    el.className = Math.abs(val - 1) < 1e-6 ? "ok" : "";
+    document.getElementById("formula").textContent =
+      "x²/b² + y²/a² = 1      a = " + state.a.toFixed(2) + "   b = ℓ − a = " + bb2.toFixed(2);
+  }
+
+  function tick() {
+    state.theta += state.speed * 0.01;
+    const g = geom(state.theta);
+    state.trace.push({ x: g.p.x, y: g.p.y });
+    if (state.trace.length > 6000) state.trace.shift();
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  const bind = (id, key, out, digits = 2) => {
+    const el = document.getElementById(id);
+    const lab = document.getElementById(out);
+    el.value = state[key];
+    lab.textContent = state[key].toFixed(digits);
+    el.addEventListener("input", () => {
+      state[key] = parseFloat(el.value);
+      lab.textContent = state[key].toFixed(digits);
+      if (state.a > state.L - 0.1) {          // 保证 b > 0
+        state.a = state.L - 0.1;
+        document.getElementById("sA").value = state.a;
+        document.getElementById("vA").textContent = state.a.toFixed(digits);
+      }
+      state.trace.length = 0;
+      fit();
+      draw();
+    });
+  };
+  bind("sL", "L", "vL");
+  bind("sA", "a", "vA");
+  bind("sSpd", "speed", "vS");
+
+  document.getElementById("bClear").onclick = () => (state.trace.length = 0);
+  document.getElementById("bReset").onclick = () => {
+    state.L = 2.6; state.a = 1.9; state.speed = 0.7; state.theta = 0; state.trace.length = 0;
+    document.getElementById("sL").value = state.L;
+    document.getElementById("sA").value = state.a;
+    document.getElementById("sSpd").value = state.speed;
+    document.getElementById("vL").textContent = state.L.toFixed(2);
+    document.getElementById("vA").textContent = state.a.toFixed(2);
+    document.getElementById("vS").textContent = state.speed.toFixed(2);
+    fit();
+  };
+
+  window.addEventListener("resize", fit);
+  fit();
+  tick();
+})();
+</script>
+</body>
+</html>
